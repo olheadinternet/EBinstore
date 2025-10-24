@@ -360,6 +360,45 @@ function downloadSVG(){
       }
     });
   });
+
+  // Second pass: ensure elements that lack any explicit fill/stroke (unset paint) get a visible stroke
+  const allShapes = Array.from(clone.querySelectorAll(shapeSelectors.join(',')));
+  allShapes.forEach(el => {
+    const style = (el.getAttribute('style')||'');
+    const hasFillAttr = el.hasAttribute('fill') && el.getAttribute('fill') !== 'none';
+    const hasStrokeAttr = el.hasAttribute('stroke') && el.getAttribute('stroke') !== 'none';
+    const styleSpecifiesFill = /(?:^|;)\s*fill\s*:/i.test(style);
+    const styleSpecifiesStroke = /(?:^|;)\s*stroke\s*:/i.test(style);
+    // if neither fill nor stroke is specified anywhere, mark it with a visible stroke
+    if (!hasFillAttr && !hasStrokeAttr && !styleSpecifiesFill && !styleSpecifiesStroke) {
+      el.setAttribute('stroke','#000000');
+      el.setAttribute('fill','none');
+      el.setAttribute('stroke-opacity','1');
+      if (!el.getAttribute('stroke-width')) el.setAttribute('stroke-width','0.25mm');
+    }
+  });
+
+  // Ensure stroke widths are not vanishingly small in Inkscape: enforce a minimum visible stroke
+  const MIN_STROKE_MM = 0.05; // minimum stroke thickness in mm for export
+  Array.from(clone.querySelectorAll(shapeSelectors.join(','))).forEach(el => {
+    const sw = el.getAttribute('stroke-width');
+    if (sw) {
+      // parse numeric value (allow units); convert values like '0.006' or '0.006mm'
+      const m = sw.match(/^\s*([0-9.]+)\s*(mm)?\s*$/);
+      if (m) {
+        const val = Number(m[1]);
+        // if value is less than minimum, set to minimum (with mm units)
+        if (val < MIN_STROKE_MM) {
+          el.setAttribute('stroke-width', String(MIN_STROKE_MM) + 'mm');
+          el.setAttribute('vector-effect','non-scaling-stroke');
+        }
+      } else {
+        // if stroke-width is in other units or complex, ensure a safe explicit mm stroke
+        el.setAttribute('stroke-width', String(MIN_STROKE_MM) + 'mm');
+        el.setAttribute('vector-effect','non-scaling-stroke');
+      }
+    }
+  });
   // also remove any full-canvas rects that likely come from editor background artifacts (sized near the viewBox)
   const viewBox = (clone.getAttribute('viewBox')||'0 0 360 120').split(/\s+/).map(Number);
   const vbW = viewBox[2]||360, vbH = viewBox[3]||120;
