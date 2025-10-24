@@ -29,6 +29,15 @@ function rawUrl(path) {
   return `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${path}`;
 }
 
+// simple debounce utility to avoid spamming rebuilds while typing
+function debounce(fn, wait){
+  let t = null;
+  return (...args)=>{
+    if (t) clearTimeout(t);
+    t = setTimeout(()=>{ t = null; fn(...args); }, wait);
+  };
+}
+
 async function init() {
   const drawings = await listFiles(config.drawingsPath);
   const fonts = await listFiles(config.fontsPath);
@@ -36,8 +45,22 @@ async function init() {
   populateDrawings(drawings);
   populateFonts(fonts);
 
+  // wire actions
   document.getElementById('previewBtn').addEventListener('click', buildPreview);
   document.getElementById('downloadBtn').addEventListener('click', downloadSVG);
+
+  // auto-preview when user switches drawings, types, or adjusts controls
+  const debounced = debounce(()=>{ buildPreview().catch(()=>{}); }, 250);
+  const drawingSelect = document.getElementById('drawingSelect');
+  if (drawingSelect) drawingSelect.addEventListener('change', debounced);
+  const msg = document.getElementById('message');
+  if (msg) msg.addEventListener('input', debounced);
+  const fontSize = document.getElementById('fontSize');
+  if (fontSize) fontSize.addEventListener('input', debounced);
+  const kerning = document.getElementById('kerning');
+  if (kerning) kerning.addEventListener('input', debounced);
+  const fontSelect = document.getElementById('fontSelect');
+  if (fontSelect) fontSelect.addEventListener('change', debounced);
 }
 
 function populateDrawings(list) {
