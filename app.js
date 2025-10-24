@@ -98,9 +98,11 @@ async function buildPreview(){
   svg.setAttribute('viewBox','0 0 360 120');
   svg.classList.add('canvas');
 
-  // add background or safe margin (optional)
+  // add a preview-only background (will be removed from the downloaded SVG)
   const bg = document.createElementNS(svgNS,'rect');
-  bg.setAttribute('x','0'); bg.setAttribute('y','0'); bg.setAttribute('width','360'); bg.setAttribute('height','120'); bg.setAttribute('fill','white');
+  bg.setAttribute('x','0'); bg.setAttribute('y','0'); bg.setAttribute('width','360'); bg.setAttribute('height','120');
+  bg.setAttribute('fill','white');
+  bg.setAttribute('data-eggbot-preview','true');
   svg.appendChild(bg);
 
   // insert drawing if selected
@@ -112,9 +114,43 @@ async function buildPreview(){
       const doc = parser.parseFromString(raw,'image/svg+xml');
       const inner = doc.documentElement;
       const g = document.createElementNS(svgNS,'g');
-      // copy children from the drawing SVG into our group as-is so drawings keep their original placement
+      // determine viewBox of the incoming drawing so we can filter out editor helper rectangles
+      let vb = inner.getAttribute('viewBox');
+      let vbW = 360, vbH = 120;
+      if (vb) {
+        const parts = vb.split(/\s+/).map(Number);
+        if (parts.length === 4) { vbW = parts[2]; vbH = parts[3]; }
+      } else {
+        // fallback to width/height attributes (may include 'mm')
+        const w = inner.getAttribute('width') || '360';
+        const h = inner.getAttribute('height') || '120';
+        vbW = Number(w.replace(/[^0-9.\-]/g,'')) || vbW;
+        vbH = Number(h.replace(/[^0-9.\-]/g,'')) || vbH;
+      }
+
+      // copy children but filter out metadata, inkscape helpers and large background rects
       Array.from(inner.childNodes).forEach(n=>{
-        g.appendChild(document.importNode(n,true));
+        if (n.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = n.tagName.toLowerCase();
+        // skip editor metadata and defs
+        if (tag === 'metadata' || tag === 'defs' || tag.indexOf('namedview') !== -1) return;
+        // filter out large rects that are likely page/background artifacts
+        if (tag === 'rect') {
+          const rx = Number(n.getAttribute('x') || 0);
+          const ry = Number(n.getAttribute('y') || 0);
+          const rw = Number((n.getAttribute('width')||'0').replace(/[^0-9.\-]/g,''));
+          const rh = Number((n.getAttribute('height')||'0').replace(/[^0-9.\-]/g,''));
+          // remove rects that are larger than the drawing dimensions or positioned far outside
+          if (rw >= vbW - 0.1 && rh >= vbH - 0.1) return;
+          if (Math.abs(rx) > vbW*2 || Math.abs(ry) > vbH*2) return;
+        }
+
+        // import the node
+        try {
+          g.appendChild(document.importNode(n,true));
+        } catch(e){
+          // ignore nodes that can't be imported
+        }
       });
       svg.appendChild(g);
     } catch(e){
@@ -210,7 +246,11 @@ function downloadSVG(){
   const container = document.getElementById('previewContainer');
   const svg = container.querySelector('svg');
   if (!svg) { alert('No preview to download'); return; }
-  const xml = new XMLSerializer().serializeToString(svg);
+  // clone and remove preview-only elements (background etc.) before serializing
+  const clone = svg.cloneNode(true);
+  // remove any preview-only rects or elements marked with data-eggbot-preview
+  Array.from(clone.querySelectorAll('[data-eggbot-preview]')).forEach(n=>n.remove());
+  const xml = new XMLSerializer().serializeToString(clone);
   const blob = new Blob([xml],{type:'image/svg+xml'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
