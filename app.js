@@ -26,6 +26,15 @@ async function listFiles(path) {
 }
 
 function rawUrl(path) {
+  // Prefer relative paths so the site can load assets from the same Pages host.
+  // This works for local dev (python -m http.server) and GitHub Pages hosting.
+  try {
+    if (typeof window !== 'undefined' && window && window.location) {
+      // Use relative path so Drawings/... and Fonts/... resolve under the site root.
+      return path;
+    }
+  } catch (e) {}
+  // Fallback to raw.githubusercontent if window isn't available.
   return `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${path}`;
 }
 
