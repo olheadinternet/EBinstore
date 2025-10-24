@@ -179,11 +179,13 @@ async function buildPreview(){
         const adv = Number(g.getAttribute('horiz-adv-x') || fontEl.getAttribute('horiz-adv-x') || 0);
         if (u && d) glyphs[u] = {d, adv};
       });
+      console.log('Loaded font glyphs:', Object.keys(glyphs).length);
 
       // Build group of glyph paths at baseline y=0
       const gGroup = document.createElementNS(svgNS,'g');
-      let cursor = 0;
-      const scale = fontSize / unitsPerEm; // mm per unit
+  let cursor = 0;
+  const scale = fontSize / unitsPerEm; // mm per font unit
+  console.log('font unitsPerEm, ascent, descent, scale:', unitsPerEm, ascent, descent, scale);
       for (const ch of message) {
         const gly = glyphs[ch] || glyphs[ch.toLowerCase()] || null;
         if (!gly) {
@@ -198,10 +200,10 @@ async function buildPreview(){
         // note: scale Y negative because font glyphs use y-up coordinates; we flip
         p.setAttribute('transform', t);
         p.setAttribute('fill','none');
-        p.setAttribute('stroke','#000');
-        // Preview stroke: use a clearly visible width in mm (preview units are mm because viewBox maps to mm)
-        // 0.5 mm is a good default for preview (≈1.89px at 96dpi). You can change this value if you prefer.
-        p.setAttribute('stroke-width','0.5');
+  p.setAttribute('stroke','#000');
+  // stroke width in mm (preview uses mm units). Scale it reasonably with font size.
+  const strokeMM = Math.max(0.2, fontSize / 48);
+  p.setAttribute('stroke-width', String(strokeMM));
         p.setAttribute('stroke-linecap','round');
         p.setAttribute('stroke-linejoin','round');
         gGroup.appendChild(p);
@@ -216,10 +218,11 @@ async function buildPreview(){
       previewContainer.innerHTML = '';
       previewContainer.appendChild(svg);
 
-      // measure bbox and translate so center aligns
+  // measure bbox and translate so center aligns
       // allow browser to compute bbox (small timeout)
       await new Promise(r=>setTimeout(r,30));
-      const bbox = gGroup.getBBox();
+  const bbox = gGroup.getBBox();
+  console.log('glyph group bbox:', bbox);
       const glyphCenterX = bbox.x + bbox.width/2;
       const glyphCenterY = bbox.y + bbox.height/2;
       const desiredCenterX = 270; // mm
@@ -228,6 +231,16 @@ async function buildPreview(){
       const dy = desiredCenterY - glyphCenterY;
       const finalTransform = `translate(${dx} ${dy})`;
       gGroup.setAttribute('transform', finalTransform + (gGroup.getAttribute('transform')? ' ' + gGroup.getAttribute('transform') : ''));
+
+      // if the glyph bbox is empty (width or height zero) warn the user
+      if (!bbox || bbox.width === 0 || bbox.height === 0) {
+        console.warn('Rendered glyph group has empty bbox; glyph paths may not have visible strokes or may be outside viewBox.');
+        const previewContainer = document.getElementById('previewContainer');
+        const hint = document.createElement('div');
+        hint.className = 'note';
+        hint.textContent = 'Warning: font glyphs did not produce a visible bbox. Check the font file format or open the browser console for details.';
+        previewContainer.appendChild(hint);
+      }
 
       // done — preview is already in container
       return;
@@ -250,6 +263,16 @@ function downloadSVG(){
   const clone = svg.cloneNode(true);
   // remove any preview-only rects or elements marked with data-eggbot-preview
   Array.from(clone.querySelectorAll('[data-eggbot-preview]')).forEach(n=>n.remove());
+  // also remove any full-canvas rects that likely come from editor background artifacts (sized near the viewBox)
+  const viewBox = (clone.getAttribute('viewBox')||'0 0 360 120').split(/\s+/).map(Number);
+  const vbW = viewBox[2]||360, vbH = viewBox[3]||120;
+  Array.from(clone.querySelectorAll('rect')).forEach(r=>{
+    const rw = Number((r.getAttribute('width')||'0').replace(/[^0-9.\-]/g,''));
+    const rh = Number((r.getAttribute('height')||'0').replace(/[^0-9.\-]/g,''));
+    if (rw >= vbW*0.95 && rh >= vbH*0.95) {
+      r.remove();
+    }
+  });
   const xml = new XMLSerializer().serializeToString(clone);
   const blob = new Blob([xml],{type:'image/svg+xml'});
   const url = URL.createObjectURL(blob);
