@@ -399,6 +399,30 @@ function downloadSVG(){
       }
     }
   });
+
+  // Ensure glyph paths specifically use non-scaling strokes and a sensible minimum width so
+  // transforms applied to glyphs (scale/flip) don't visually shrink the stroke in Inkscape.
+  const glyphPaths = Array.from(clone.querySelectorAll('[data-eggbot-glyphs] path'));
+  glyphPaths.forEach(p => {
+    // ensure stroke exists
+    if (!p.getAttribute('stroke')) p.setAttribute('stroke', '#000000');
+    // parse existing stroke-width or set minimum
+    const sw = p.getAttribute('stroke-width');
+    let newSw = null;
+    if (sw) {
+      const m = sw.match(/^\s*([0-9.]+)\s*(mm)?\s*$/);
+      if (m) {
+        const val = Number(m[1]);
+        newSw = (val < MIN_STROKE_MM) ? (String(MIN_STROKE_MM) + 'mm') : (m[2] ? sw : (String(val) + 'mm'));
+      } else {
+        newSw = String(MIN_STROKE_MM) + 'mm';
+      }
+    } else {
+      newSw = String(MIN_STROKE_MM) + 'mm';
+    }
+    if (newSw) p.setAttribute('stroke-width', newSw);
+    p.setAttribute('vector-effect','non-scaling-stroke');
+  });
   // also remove any full-canvas rects that likely come from editor background artifacts (sized near the viewBox)
   const viewBox = (clone.getAttribute('viewBox')||'0 0 360 120').split(/\s+/).map(Number);
   const vbW = viewBox[2]||360, vbH = viewBox[3]||120;
