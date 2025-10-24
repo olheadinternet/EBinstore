@@ -182,9 +182,12 @@ async function buildPreview(){
       console.log('Loaded font glyphs:', Object.keys(glyphs).length);
 
       // Build group of glyph paths at baseline y=0
-      const gGroup = document.createElementNS(svgNS,'g');
+  const gGroup = document.createElementNS(svgNS,'g');
+  // mark glyph group so it's easy to find during debugging/export
+  gGroup.setAttribute('data-eggbot-glyphs','true');
   let cursor = 0;
-  const scale = fontSize / unitsPerEm; // mm per font unit
+  // mm per font unit
+  const scale = fontSize / unitsPerEm;
   console.log('font unitsPerEm, ascent, descent, scale:', unitsPerEm, ascent, descent, scale);
       for (const ch of message) {
         const gly = glyphs[ch] || glyphs[ch.toLowerCase()] || null;
@@ -195,23 +198,37 @@ async function buildPreview(){
         }
         const p = document.createElementNS(svgNS,'path');
         p.setAttribute('d', gly.d);
-        // place glyph at cursor; also scale by font units to mm
-        const t = `translate(${cursor},0) scale(${scale} ${-scale})`;
-        // note: scale Y negative because font glyphs use y-up coordinates; we flip
-        p.setAttribute('transform', t);
-        p.setAttribute('fill','none');
+    // place glyph at cursor and scale by font units to mm (positive scaling)
+    // we'll flip the whole glyph group vertically (y) using the font ascent
+    const t = `translate(${cursor},0) scale(${scale} ${scale})`;
+    p.setAttribute('transform', t);
+    p.setAttribute('fill','none');
   p.setAttribute('stroke','#000');
-  // stroke width in mm (preview uses mm units). Scale it reasonably with font size.
-  const strokeMM = Math.max(0.2, fontSize / 48);
-  p.setAttribute('stroke-width', String(strokeMM));
+  // baseline stroke width (export-safe, small). We'll apply a thicker preview-only stroke via inline styles
+  const baseStrokeMM = Math.max(0.12, fontSize / 96);
+  p.setAttribute('stroke-width', String(baseStrokeMM));
+  // mark this path as part of preview-only styling so we can strip styles before export
+  p.setAttribute('data-eggbot-preview-stroke','true');
+  // apply preview-only inline styles to make strokes visible during preview
+  // use non-scaling stroke so the visual thickness is independent of path scaling
+  const previewStrokeMM = Math.max(0.6, fontSize / 24);
+  p.style.strokeWidth = previewStrokeMM + 'mm';
+  p.style.vectorEffect = 'non-scaling-stroke';
         p.setAttribute('stroke-linecap','round');
         p.setAttribute('stroke-linejoin','round');
         gGroup.appendChild(p);
         cursor += (gly.adv || 600) * scale + kerning; // adv in font units
       }
 
-      // append to SVG but we need to center the text group horizontally at x=270 and vertically at y=60
-      svg.appendChild(gGroup);
+  // flip the whole glyph group vertically so font y-up coordinates map to SVG y-down
+  // translate by ascent*scale to align the font baseline at y=0, then flip
+  const flip = `translate(0 ${ascent * scale}) scale(1 -1)`;
+  // if there was any group-level transform already, keep it and append the flip
+  const existingGroupTransform = gGroup.getAttribute('transform') || '';
+  gGroup.setAttribute('transform', (existingGroupTransform ? existingGroupTransform + ' ' : '') + flip);
+
+  // append to SVG but we need to center the text group horizontally at x=270 and vertically at y=60
+  svg.appendChild(gGroup);
 
       // append to DOM preview first so we can measure bbox
       const previewContainer = document.getElementById('previewContainer');
@@ -263,6 +280,13 @@ function downloadSVG(){
   const clone = svg.cloneNode(true);
   // remove any preview-only rects or elements marked with data-eggbot-preview
   Array.from(clone.querySelectorAll('[data-eggbot-preview]')).forEach(n=>n.remove());
+  // remove preview-only stroke styles we applied to glyph paths so export uses baseline strokes
+  Array.from(clone.querySelectorAll('[data-eggbot-preview-stroke]')).forEach(el=>{
+    // remove the inline style applied for preview visibility
+    el.removeAttribute('style');
+    // remove our preview marker attribute
+    el.removeAttribute('data-eggbot-preview-stroke');
+  });
   // also remove any full-canvas rects that likely come from editor background artifacts (sized near the viewBox)
   const viewBox = (clone.getAttribute('viewBox')||'0 0 360 120').split(/\s+/).map(Number);
   const vbW = viewBox[2]||360, vbH = viewBox[3]||120;
