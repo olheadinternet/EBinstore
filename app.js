@@ -338,6 +338,28 @@ function downloadSVG(){
     // remove our preview marker attribute
     el.removeAttribute('data-eggbot-preview-stroke');
   });
+
+  // Make sure elements that had both fill="none" and stroke="none" are visible in Inkscape.
+  // Some SVGs (or editors) place both to hide elements from viewers; Inkscape can ignore them.
+  // We convert those to single-stroke shapes so they show up: stroke="#000000" and fill="none".
+  const shapeSelectors = ['path','circle','ellipse','rect','line','polyline','polygon'];
+  shapeSelectors.forEach(sel => {
+    Array.from(clone.querySelectorAll(sel)).forEach(el => {
+      const style = (el.getAttribute('style')||'');
+      const styleHasFillNone = /(?:^|;)\s*fill\s*:\s*none(?:;|$)/i.test(style) || el.getAttribute('fill') === 'none';
+      const styleHasStrokeNone = /(?:^|;)\s*stroke\s*:\s*none(?:;|$)/i.test(style) || el.getAttribute('stroke') === 'none';
+      if (styleHasFillNone && styleHasStrokeNone) {
+        // remove only the fill:none and stroke:none declarations from style
+        let newStyle = style.replace(/(?:^|;)\s*fill\s*:\s*none;?/ig,'').replace(/(?:^|;)\s*stroke\s*:\s*none;?/ig,'').trim();
+        if (newStyle === '' ) el.removeAttribute('style'); else el.setAttribute('style', newStyle);
+
+        // set a visible single-stroke so Inkscape will render it
+        el.setAttribute('stroke','#000000');
+        el.setAttribute('fill','none');
+        if (!el.getAttribute('stroke-width')) el.setAttribute('stroke-width','0.25mm');
+      }
+    });
+  });
   // also remove any full-canvas rects that likely come from editor background artifacts (sized near the viewBox)
   const viewBox = (clone.getAttribute('viewBox')||'0 0 360 120').split(/\s+/).map(Number);
   const vbW = viewBox[2]||360, vbH = viewBox[3]||120;
