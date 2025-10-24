@@ -41,26 +41,45 @@ async function init() {
 }
 
 function populateDrawings(list) {
-  const container = document.getElementById('drawings');
-  container.innerHTML = '';
-  if (list.length === 0) container.innerHTML = '<div class="note">No drawings found (place SVGs in Drawings/)</div>';
+  const sel = document.getElementById('drawingSelect');
+  const thumb = document.getElementById('drawingThumb');
+  sel.innerHTML = '';
+  thumb.src = '';
+  thumb.alt = '';
+  const none = document.createElement('option'); none.value = ''; none.textContent = '— select drawing —'; sel.appendChild(none);
+  if (list.length === 0) {
+    const opt = document.createElement('option'); opt.value=''; opt.textContent='No drawings found (place SVGs in Drawings/)'; sel.appendChild(opt);
+    thumb.style.display = 'none';
+    return;
+  }
+
   list.forEach(f => {
-    const btn = document.createElement('button');
-    btn.dataset.path = f.path;
-    const img = document.createElement('img');
-    // use raw svg as image (browsers will render it)
-    img.src = rawUrl(f.path);
-    img.alt = f.name;
-    btn.appendChild(img);
-    const span = document.createElement('div');
-    span.textContent = f.name;
-    btn.appendChild(span);
-    btn.addEventListener('click', ()=> {
-      document.querySelectorAll('#drawings button').forEach(b=>b.classList.remove('selected'));
-      btn.classList.add('selected');
-    });
-    container.appendChild(btn);
+    const o = document.createElement('option');
+    o.value = f.path;
+    o.textContent = f.name;
+    o.dataset.thumb = rawUrl(f.path);
+    sel.appendChild(o);
   });
+
+  // show thumbnail for current selection
+  sel.addEventListener('change', ()=>{
+    const v = sel.value;
+    if (!v) { thumb.style.display = 'none'; thumb.src = ''; thumb.alt = ''; return; }
+    const option = sel.querySelector(`option[value="${v}"]`);
+    const src = option?.dataset?.thumb || rawUrl(v);
+    thumb.src = src; thumb.alt = option?.textContent || v; thumb.style.display = '';
+  });
+
+  // select first drawing by default
+  sel.selectedIndex = 0;
+  // if there is a first real option, pick it and update thumb
+  if (sel.options.length > 1) {
+    sel.selectedIndex = 1;
+    const evt = new Event('change');
+    sel.dispatchEvent(evt);
+  } else {
+    thumb.style.display = 'none';
+  }
 }
 
 function populateFonts(list) {
@@ -83,8 +102,8 @@ async function fetchText(url){
 }
 
 async function buildPreview(){
-  const selected = document.querySelector('#drawings button.selected');
-  const drawingPath = selected ? selected.dataset.path : null;
+  const drawingSelectEl = document.getElementById('drawingSelect');
+  const drawingPath = drawingSelectEl ? (drawingSelectEl.value || null) : null;
   const fontPath = document.getElementById('fontSelect').value;
   const message = document.getElementById('message').value || '';
   const fontSize = Number(document.getElementById('fontSize').value) || 24;

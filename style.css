@@ -9,6 +9,9 @@ header h1{margin:0 0 6px}
 .list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}
 .list button{display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;border:1px solid #eee;background:#fafafa;cursor:pointer}
 .list button img{width:120px;height:40px;object-fit:cover;border-radius:3px}
+.drawing-select{display:flex;align-items:center;gap:8px}
+.drawing-select select{flex:1;padding:8px;border-radius:6px;border:1px solid #ddd;background:white}
+.drawing-select img{width:120px;height:40px;object-fit:cover;border-radius:3px;border:1px solid #eee}
 .actions{margin-top:10px;display:flex;gap:8px}
 input[type=text],input[type=search],#message{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
 .preview{margin-top:18px;background:var(--panel);padding:12px;border-radius:8px}
