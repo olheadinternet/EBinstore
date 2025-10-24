@@ -107,24 +107,16 @@ async function buildPreview(){
   if (drawingPath) {
     try {
       const raw = await fetchText(rawUrl(drawingPath));
-      // parse drawing svg and import its contents
+      // parse drawing svg and import its contents without modifying positioning
       const parser = new DOMParser();
       const doc = parser.parseFromString(raw,'image/svg+xml');
       const inner = doc.documentElement;
-      // adopt node into our document
       const g = document.createElementNS(svgNS,'g');
-      // copy children
+      // copy children from the drawing SVG into our group as-is so drawings keep their original placement
       Array.from(inner.childNodes).forEach(n=>{
         g.appendChild(document.importNode(n,true));
       });
-      // scale/translate so the drawing center sits at x=90, y=60
-      // assume drawing is already 360x120 viewBox; just translate so its center lies at 90
-      // We'll place it in a group and translate horizontally so its center is at 90.
-      const grp = document.createElementNS(svgNS,'g');
-      grp.setAttribute('transform', 'translate(-90, 0)');
-      // the drawing (which occupies 0..360) should be centered at x=90: move it left by 90
-      grp.appendChild(g);
-      svg.appendChild(grp);
+      svg.appendChild(g);
     } catch(e){
       console.error('drawing load failed', e);
     }
@@ -171,7 +163,11 @@ async function buildPreview(){
         p.setAttribute('transform', t);
         p.setAttribute('fill','none');
         p.setAttribute('stroke','#000');
-        p.setAttribute('stroke-width',Math.max(0.2, fontSize/40));
+        // Preview stroke: use a clearly visible width in mm (preview units are mm because viewBox maps to mm)
+        // 0.5 mm is a good default for preview (≈1.89px at 96dpi). You can change this value if you prefer.
+        p.setAttribute('stroke-width','0.5');
+        p.setAttribute('stroke-linecap','round');
+        p.setAttribute('stroke-linejoin','round');
         gGroup.appendChild(p);
         cursor += (gly.adv || 600) * scale + kerning; // adv in font units
       }
